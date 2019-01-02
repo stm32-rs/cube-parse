@@ -3,6 +3,7 @@ use std::{collections::HashMap, env, path::Path};
 use alphanumeric_sort::compare_str;
 use serde_xml_rs;
 
+mod family;
 mod internal_peripheral;
 mod mcu;
 mod utils;
@@ -48,19 +49,36 @@ fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
-        eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FILE")
+        eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FAMILY")
     }
 
     let db_dir = Path::new(&args[1]);
 
+    let familys = family::Families::load(&db_dir).unwrap();
 
+    let family = (&familys).into_iter().find(|v| v.name == args[2]).unwrap();
 
-    let val = mcu::Mcu::load(&db_dir, &args[2]).unwrap();
+    let mut mcu_gpio_map = HashMap::new();
 
-    let gpio = {
-        let gpio_name = val.get_ip("GPIO").unwrap().get_version();
-        internal_peripheral::IpGPIO::load(&db_dir, gpio_name).unwrap()
-    };
+    for sf in family {
+        for mcu in sf {
+            let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name).unwrap();
+            let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
+            if !mcu_gpio_map.contains_key(&gpio_version) {
+                mcu_gpio_map.insert(gpio_version.clone(), Vec::new());
+            }
+            mcu_gpio_map.get_mut(&gpio_version).unwrap().push(mcu.name.clone());
+        }
+    }
 
-    render_pin_modes(&gpio);
+    for (gpio, mcu_list) in mcu_gpio_map {
+        let gpio_data = internal_peripheral::IpGPIO::load(db_dir, &gpio).unwrap();
+        println!("#[cfg(any(");
+        for mcu in mcu_list {
+            println!("    feature = {:?},", mcu);
+        }
+        println!("))]");
+        render_pin_modes(&gpio_data);
+        println!("\n");
+    }
 }
