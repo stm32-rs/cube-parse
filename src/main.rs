@@ -1,162 +1,15 @@
 use std::{collections::HashMap, env, fs::File, path::Path};
 
 use alphanumeric_sort::compare_str;
-use serde;
-use serde_derive::Deserialize;
 use serde_xml_rs;
 
-#[derive(Debug, Deserialize)]
-struct Mcu {
-    #[serde(rename = "IP", default)]
-    ip: Vec<IP>,
-}
+mod mcu;
+mod internal_peripheral;
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct IP {
-    instance_name: String,
-    name: String,
-    version: String,
-}
-
-mod ip_parse {
-    use lazy_static::lazy_static;
-    use regex::Regex;
-    use serde;
-    use serde_derive::Deserialize;
-
-    #[derive(Debug, Deserialize)]
-    pub(crate) struct PossibleValue {
-        #[serde(rename = "$value")]
-        pub(crate) val: String,
-    }
-
-    #[derive(Debug, Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    pub struct SpecificParameter {
-        name: String,
-        possible_value: PossibleValue,
-    }
-
-    #[derive(Debug, Deserialize)]
-    #[serde(rename_all = "PascalCase")]
-    pub struct PinSignal {
-        name: String,
-        specific_parameter: SpecificParameter,
-    }
-
-    impl PinSignal {
-        fn get_af_value(&self) -> &str {
-            self.specific_parameter
-                .possible_value
-                .val
-                .split('_')
-                .collect::<Vec<_>>()[1]
-        }
-    }
-
-    #[derive(Debug, Deserialize)]
-    #[serde(rename = "GPIO_Pin", rename_all = "PascalCase")]
-    pub struct GPIOPin {
-        port_name: String,
-        name: String,
-        specific_parameter: Vec<SpecificParameter>,
-        pin_signal: Option<Vec<PinSignal>>,
-    }
-
-    #[derive(Debug, Deserialize)]
-    pub struct IP {
-        #[serde(rename = "GPIO_Pin")]
-        pub(crate) gpio_pin: Vec<GPIOPin>,
-    }
-
-    lazy_static! {
-        static ref USART_RX: Regex = Regex::new("USART._RX").unwrap();
-        static ref USART_TX: Regex = Regex::new("USART._TX").unwrap();
-        static ref SPI_MOSI: Regex = Regex::new("SPI._MOSI").unwrap();
-        static ref SPI_MISO: Regex = Regex::new("SPI._MISO").unwrap();
-        static ref SPI_SCK: Regex = Regex::new("SPI._SCK").unwrap();
-        static ref I2C_SCL: Regex = Regex::new("I2C._SCL").unwrap();
-        static ref I2C_SDA: Regex = Regex::new("I2C._SDA").unwrap();
-    }
-
-    impl GPIOPin {
-        pub fn get_name(&self) -> Option<String> {
-            let gpio_pin = self
-                .specific_parameter
-                .iter()
-                .find(|v| v.name == "GPIO_Pin");
-            match gpio_pin {
-                Some(v) => {
-                    let num = v.possible_value.val.split('_').collect::<Vec<_>>()[2];
-                    Some(format!("{}{}", &self.port_name, num))
-                }
-                None => None,
-            }
-        }
-
-        pub fn get_af_modes(&self) -> Vec<String> {
-            let mut res = Vec::new();
-            if let Some(ref v) = self.pin_signal {
-                for sig in v {
-                    let per = sig.name.split('_').collect::<Vec<_>>()[0];
-                    if USART_RX.is_match(&sig.name) {
-                        res.push(format!("{}: RxPin<{}>", sig.get_af_value(), per));
-                    }
-                    if USART_TX.is_match(&sig.name) {
-                        res.push(format!("{}: TxPin<{}>", sig.get_af_value(), per));
-                    }
-                    if SPI_MOSI.is_match(&sig.name) {
-                        res.push(format!("{}: MosiPin<{}>", sig.get_af_value(), per));
-                    }
-                    if SPI_MISO.is_match(&sig.name) {
-                        res.push(format!("{}: MisoPin<{}>", sig.get_af_value(), per));
-                    }
-                    if SPI_SCK.is_match(&sig.name) {
-                        res.push(format!("{}: SckPin<{}>", sig.get_af_value(), per));
-                    }
-                    if I2C_SCL.is_match(&sig.name) {
-                        res.push(format!("{}: SclPin<{}>", sig.get_af_value(), per));
-                    }
-                    if I2C_SDA.is_match(&sig.name) {
-                        res.push(format!("{}: SdaPin<{}>", sig.get_af_value(), per));
-                    }
-                }
-            }
-            res
-        }
-    }
-}
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FILE")
-    }
-
-    let db_dir = Path::new(&args[1]);
-
-    let val: Mcu = {
-        let mcu_file = db_dir.with_file_name(format!("{}.xml", &args[2]));
-
-        let mut fin = File::open(&mcu_file).unwrap();
-
-        serde_xml_rs::deserialize(&mut fin).unwrap()
-    };
-
-    let gpio: ip_parse::IP = {
-        let gpio_name = { &val.ip.iter().find(|v| v.name == "GPIO").unwrap().version };
-
-        let gpio_file = db_dir.with_file_name(format!("IP/GPIO-{}_Modes.xml", gpio_name));
-
-        let mut fin = File::open(&gpio_file).unwrap();
-
-        serde_xml_rs::deserialize(&mut fin).unwrap()
-    };
-
+fn render_pin_modes(ip: &internal_peripheral::IP) {
     let mut pin_map: HashMap<String, Vec<String>> = HashMap::new();
 
-    for p in &gpio.gpio_pin {
+    for p in &ip.gpio_pin {
         let name = p.get_name();
         if let Some(n) = name {
             pin_map.insert(n, p.get_af_modes());
@@ -166,11 +19,14 @@ fn main() {
     let mut pin_map = pin_map
         .into_iter()
         .map(|(k, mut v)| {
+            #[allow(clippy::redundant_closure)]
             v.sort_by(|a, b| compare_str(a, b));
             (k, v)
         })
         .collect::<Vec<_>>();
+
     pin_map.sort_by(|a, b| compare_str(&a.0, &b.0));
+
     println!("pins! {{");
     for (n, af) in pin_map {
         if af.is_empty() {
@@ -186,4 +42,33 @@ fn main() {
         }
     }
     println!("}}");
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FILE")
+    }
+
+    let db_dir = Path::new(&args[1]);
+
+    let val: mcu::Mcu = {
+        let mcu_file = db_dir.with_file_name(format!("{}.xml", &args[2]));
+
+        let mut fin = File::open(&mcu_file).unwrap();
+
+        serde_xml_rs::deserialize(&mut fin).unwrap()
+    };
+
+    let gpio: internal_peripheral::IP = {
+        let gpio_name = val.get_ip("GPIO").unwrap().get_version();
+
+        let gpio_file = db_dir.with_file_name(format!("IP/GPIO-{}_Modes.xml", gpio_name));
+
+        let mut fin = File::open(&gpio_file).unwrap();
+
+        serde_xml_rs::deserialize(&mut fin).unwrap()
+    };
+
+    render_pin_modes(&gpio);
 }
