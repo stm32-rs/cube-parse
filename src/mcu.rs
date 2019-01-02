@@ -1,5 +1,9 @@
+use std::path::Path;
+
 use serde;
 use serde_derive::Deserialize;
+
+use crate::utils::load_file;
 
 #[derive(Debug, Deserialize)]
 pub struct Mcu {
@@ -8,6 +12,11 @@ pub struct Mcu {
 }
 
 impl Mcu {
+    pub fn load<P: AsRef<Path>>(db_dir: P, mcu_name: &str) -> Result<Self, Box<std::error::Error>> {
+        load_file(db_dir, format!("{}.xml", mcu_name))
+    }
+
+
     pub fn get_ip(&self, name: &str) -> Option<&IP> {
         self.ip.iter().find(|v| v.name == name)
     }

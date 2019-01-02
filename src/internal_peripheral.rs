@@ -1,7 +1,11 @@
+use std::path::Path;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde;
 use serde_derive::Deserialize;
+
+use crate::utils::load_file;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PossibleValue {
@@ -43,9 +47,16 @@ pub struct GPIOPin {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct IP {
+#[serde(rename="IP")]
+pub struct IpGPIO {
     #[serde(rename = "GPIO_Pin")]
     pub(crate) gpio_pin: Vec<GPIOPin>,
+}
+
+impl IpGPIO {
+    pub fn load<P: AsRef<Path>>(db_dir: P, version: &str) -> Result<Self, Box<std::error::Error>> {
+        load_file(db_dir, format!("IP/GPIO-{}_Modes.xml", version))
+    }
 }
 
 lazy_static! {

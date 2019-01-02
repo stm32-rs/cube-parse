@@ -1,12 +1,13 @@
-use std::{collections::HashMap, env, fs::File, path::Path};
+use std::{collections::HashMap, env, path::Path};
 
 use alphanumeric_sort::compare_str;
 use serde_xml_rs;
 
-mod mcu;
 mod internal_peripheral;
+mod mcu;
+mod utils;
 
-fn render_pin_modes(ip: &internal_peripheral::IP) {
+fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
     let mut pin_map: HashMap<String, Vec<String>> = HashMap::new();
 
     for p in &ip.gpio_pin {
@@ -52,22 +53,13 @@ fn main() {
 
     let db_dir = Path::new(&args[1]);
 
-    let val: mcu::Mcu = {
-        let mcu_file = db_dir.with_file_name(format!("{}.xml", &args[2]));
 
-        let mut fin = File::open(&mcu_file).unwrap();
 
-        serde_xml_rs::deserialize(&mut fin).unwrap()
-    };
+    let val = mcu::Mcu::load(&db_dir, &args[2]).unwrap();
 
-    let gpio: internal_peripheral::IP = {
+    let gpio = {
         let gpio_name = val.get_ip("GPIO").unwrap().get_version();
-
-        let gpio_file = db_dir.with_file_name(format!("IP/GPIO-{}_Modes.xml", gpio_name));
-
-        let mut fin = File::open(&gpio_file).unwrap();
-
-        serde_xml_rs::deserialize(&mut fin).unwrap()
+        internal_peripheral::IpGPIO::load(&db_dir, gpio_name).unwrap()
     };
 
     render_pin_modes(&gpio);
