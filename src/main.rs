@@ -46,7 +46,7 @@ fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
     println!("}}");
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FAMILY")
@@ -54,15 +54,20 @@ fn main() {
 
     let db_dir = Path::new(&args[1]);
 
-    let familys = family::Families::load(&db_dir).unwrap();
+    let families = family::Families::load(&db_dir)
+        .map_err(|e| format!("Could not load families XML: {}", e))?;
 
-    let family = (&familys).into_iter().find(|v| v.name == args[2]).unwrap();
+    let family = (&families)
+        .into_iter()
+        .find(|v| v.name == args[2])
+        .ok_or_else(|| format!("Could not find family {}", args[2]))?;
 
     let mut mcu_gpio_map = HashMap::new();
 
     for sf in family {
         for mcu in sf {
-            let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name).unwrap();
+            let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name)
+                .map_err(|e| format!("Could not load MCU data: {}", e))?;
             let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
             if !mcu_gpio_map.contains_key(&gpio_version) {
                 mcu_gpio_map.insert(gpio_version.clone(), Vec::new());
@@ -75,7 +80,8 @@ fn main() {
     }
 
     for (gpio, mcu_list) in mcu_gpio_map {
-        let gpio_data = internal_peripheral::IpGPIO::load(db_dir, &gpio).unwrap();
+        let gpio_data = internal_peripheral::IpGPIO::load(db_dir, &gpio)
+            .map_err(|e| format!("Could not load IP GPIO file: {}", e))?;
         println!("#[cfg(any(");
         for mcu in mcu_list {
             println!("    feature = {:?},", mcu);
@@ -84,4 +90,6 @@ fn main() {
         render_pin_modes(&gpio_data);
         println!("\n");
     }
+
+    Ok(())
 }
