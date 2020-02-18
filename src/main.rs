@@ -1,7 +1,6 @@
 use std::{collections::HashMap, env, path::Path};
 
 use alphanumeric_sort::compare_str;
-use serde_xml_rs;
 
 mod family;
 mod internal_peripheral;

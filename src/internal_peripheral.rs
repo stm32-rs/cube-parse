@@ -2,7 +2,6 @@ use std::path::Path;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde;
 use serde_derive::Deserialize;
 
 use crate::utils::load_file;

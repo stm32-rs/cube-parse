@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use serde;
 use serde_derive::Deserialize;
 
 use crate::utils::load_file;
