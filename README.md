@@ -12,8 +12,7 @@ Under a default windows install `$PATH_TO_MCU_DB_DIR` is `C:\Program Files
 (x86)\STMicroelectronics\STM32Cube\STM32CubeMX\db\mcu`, adjust as appropriate
 for your local config. The MCU family name should match one of the MCU families
 as defined in `families.xml`. The program will output one AF mode definition
-per GPIO variant, with cfg feature gates for the different MCU variants that
-utilise that GPIO type.
+per GPIO variant, with a corresponding feature gate.
 
 ## The STM32CubeMX Database
 
