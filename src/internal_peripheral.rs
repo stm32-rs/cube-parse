@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::path::Path;
 
 use lazy_static::lazy_static;
@@ -53,7 +54,7 @@ pub struct IpGPIO {
 }
 
 impl IpGPIO {
-    pub fn load<P: AsRef<Path>>(db_dir: P, version: &str) -> Result<Self, Box<std::error::Error>> {
+    pub fn load<P: AsRef<Path>>(db_dir: P, version: &str) -> Result<Self, Box<dyn Error>> {
         load_file(db_dir, format!("IP/GPIO-{}_Modes.xml", version))
     }
 }

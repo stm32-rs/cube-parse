@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::path::Path;
 
 use serde_derive::Deserialize;
@@ -11,7 +12,7 @@ pub struct Mcu {
 }
 
 impl Mcu {
-    pub fn load<P: AsRef<Path>>(db_dir: P, mcu_name: &str) -> Result<Self, Box<std::error::Error>> {
+    pub fn load<P: AsRef<Path>>(db_dir: P, mcu_name: &str) -> Result<Self, Box<dyn Error>> {
         load_file(db_dir, format!("{}.xml", mcu_name))
     }
 
