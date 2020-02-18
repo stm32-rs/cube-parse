@@ -47,7 +47,7 @@ pub struct GPIOPin {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename="IP")]
+#[serde(rename = "IP")]
 pub struct IpGPIO {
     #[serde(rename = "GPIO_Pin")]
     pub(crate) gpio_pin: Vec<GPIOPin>,

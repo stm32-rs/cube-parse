@@ -8,7 +8,7 @@ use crate::utils::load_file;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Families {
-    #[serde(rename="Family")]
+    #[serde(rename = "Family")]
     families: Vec<Family>,
 }
 
@@ -16,7 +16,7 @@ pub struct Families {
 #[serde(rename_all = "PascalCase")]
 pub struct Family {
     pub name: String,
-    #[serde(rename="SubFamily")]
+    #[serde(rename = "SubFamily")]
     sub_families: Vec<SubFamily>,
 }
 
@@ -24,7 +24,7 @@ pub struct Family {
 #[serde(rename_all = "PascalCase")]
 pub struct SubFamily {
     pub name: String,
-    #[serde(rename="Mcu")]
+    #[serde(rename = "Mcu")]
     mcus: Vec<Mcu>,
 }
 

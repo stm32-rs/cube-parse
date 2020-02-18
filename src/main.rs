@@ -67,7 +67,10 @@ fn main() {
             if !mcu_gpio_map.contains_key(&gpio_version) {
                 mcu_gpio_map.insert(gpio_version.clone(), Vec::new());
             }
-            mcu_gpio_map.get_mut(&gpio_version).unwrap().push(mcu.name.clone());
+            mcu_gpio_map
+                .get_mut(&gpio_version)
+                .unwrap()
+                .push(mcu.name.clone());
         }
     }
 

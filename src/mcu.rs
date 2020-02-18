@@ -16,7 +16,6 @@ impl Mcu {
         load_file(db_dir, format!("{}.xml", mcu_name))
     }
 
-
     pub fn get_ip(&self, name: &str) -> Option<&IP> {
         self.ip.iter().find(|v| v.name == name)
     }
