@@ -1,5 +1,7 @@
 # Cube Parser
 
+[![Build Status][github-actions-badge]][github-actions]
+
 A program to extract AF modes on MCU pins from the database files provided with STM32CubeMX.
 
 ## Usage
@@ -184,3 +186,7 @@ However, sticking to the (sometimes non-logical) grouping used in the CubeMX
 database is probably still better than creating our own grouping, which may be
 broken at any time by ST releasing a new MCU in a pre-existing group, but with
 a different, incompatible GPIO IP version.
+
+<!-- Badges -->
+[github-actions]: https://github.com/dbrgn/cube-parse/actions?query=branch%3Amaster
+[github-actions-badge]: https://github.com/dbrgn/cube-parse/workflows/CI/badge.svg
