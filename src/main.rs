@@ -104,27 +104,29 @@ fn main() -> Result<(), String> {
         _ => unreachable!(),
     };
 
+    // Load families
     let families = family::Families::load(&db_dir)
         .map_err(|e| format!("Could not load families XML: {}", e))?;
 
+    // Find target family
     let family = (&families)
         .into_iter()
         .find(|v| v.name == mcu_family)
         .ok_or_else(|| format!("Could not find family {}", mcu_family))?;
 
-    let mut mcu_gpio_map = HashMap::new();
-
+    // Build MCU map
+    //
+    // The keys of this map are GPIO peripheral version strings (e.g.
+    // "STM32L051_gpio_v1_0"), while the value is a Vec of MCU ref names.
+    let mut mcu_gpio_map: HashMap<String, Vec<String>> = HashMap::new();
     for sf in family {
         for mcu in sf {
             let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name)
                 .map_err(|e| format!("Could not load MCU data: {}", e))?;
             let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
-            if !mcu_gpio_map.contains_key(&gpio_version) {
-                mcu_gpio_map.insert(gpio_version.clone(), Vec::new());
-            }
             mcu_gpio_map
-                .get_mut(&gpio_version)
-                .unwrap()
+                .entry(gpio_version)
+                .or_insert(vec![])
                 .push(mcu.name.clone());
         }
     }
