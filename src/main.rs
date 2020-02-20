@@ -1,6 +1,7 @@
 use std::{collections::HashMap, env, path::Path};
 
 use alphanumeric_sort::compare_str;
+use clap::{App, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -63,20 +64,36 @@ fn gpio_version_to_feature(version: &str) -> Result<String, String> {
 }
 
 fn main() -> Result<(), String> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!("Usage: ./cube-parse CUBEMX_MCU_DB_DIR MCU_FAMILY")
-    }
+    let args = App::new("cube-parse")
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("Extract AF modes on MCU pins from the database files provided with STM32CubeMX")
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .arg(
+            Arg::with_name("db_dir")
+                .short("d")
+                .help("Path to the CubeMX MCU database directory")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("mcu_family")
+                .short("m")
+                .help("The MCU family to extract, e.g. \"STM32L0\"")
+                .takes_value(true)
+                .required(true),
+        )
+        .get_matches();
 
-    let db_dir = Path::new(&args[1]);
+    let db_dir = Path::new(args.value_of("db_dir").unwrap());
+    let mcu_family = args.value_of("mcu_family").unwrap();
 
     let families = family::Families::load(&db_dir)
         .map_err(|e| format!("Could not load families XML: {}", e))?;
 
     let family = (&families)
         .into_iter()
-        .find(|v| v.name == args[2])
-        .ok_or_else(|| format!("Could not find family {}", args[2]))?;
+        .find(|v| v.name == mcu_family)
+        .ok_or_else(|| format!("Could not find family {}", mcu_family))?;
 
     let mut mcu_gpio_map = HashMap::new();
 
@@ -116,8 +133,14 @@ mod tests {
     #[test]
     fn test_gpio_version_to_feature() {
         // Success
-        assert_eq!(gpio_version_to_feature("STM32L152x8_gpio_v1_0").unwrap(), "io-STM32L152x8");
-        assert_eq!(gpio_version_to_feature("STM32F333_gpio_v1_0").unwrap(), "io-STM32F333");
+        assert_eq!(
+            gpio_version_to_feature("STM32L152x8_gpio_v1_0").unwrap(),
+            "io-STM32L152x8"
+        );
+        assert_eq!(
+            gpio_version_to_feature("STM32F333_gpio_v1_0").unwrap(),
+            "io-STM32F333"
+        );
 
         // Error parsing, unsupported version
         assert!(gpio_version_to_feature("STM32F333_gpio_v1_1").is_err());
