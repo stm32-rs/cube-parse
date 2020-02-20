@@ -10,47 +10,10 @@ mod internal_peripheral;
 mod mcu;
 mod utils;
 
+#[derive(Debug, PartialEq)]
 enum GenerateTarget {
     PinMappings,
     Features,
-}
-
-fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
-    let mut pin_map: HashMap<String, Vec<String>> = HashMap::new();
-
-    for p in &ip.gpio_pin {
-        let name = p.get_name();
-        if let Some(n) = name {
-            pin_map.insert(n, p.get_af_modes());
-        }
-    }
-
-    let mut pin_map = pin_map
-        .into_iter()
-        .map(|(k, mut v)| {
-            #[allow(clippy::redundant_closure)]
-            v.sort_by(|a, b| compare_str(a, b));
-            (k, v)
-        })
-        .collect::<Vec<_>>();
-
-    pin_map.sort_by(|a, b| compare_str(&a.0, &b.0));
-
-    println!("pins! {{");
-    for (n, af) in pin_map {
-        if af.is_empty() {
-            continue;
-        } else if af.len() == 1 {
-            println!("    {} => {{{}}},", n, af[0]);
-        } else {
-            println!("    {} => {{", n);
-            for a in af {
-                println!("        {},", a);
-            }
-            println!("    }},");
-        }
-    }
-    println!("}}");
 }
 
 lazy_static! {
@@ -127,22 +90,106 @@ fn main() -> Result<(), String> {
             mcu_gpio_map
                 .entry(gpio_version)
                 .or_insert(vec![])
-                .push(mcu.name.clone());
+                .push(mcu.ref_name.clone());
         }
     }
 
+    match generate {
+        GenerateTarget::Features => generate_features(&mcu_gpio_map)?,
+        GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
+    };
+
+    Ok(())
+}
+
+/// Print the IO features, followed by MCU features that act purely as aliases
+/// for the IO features.
+///
+/// Both lists are sorted alphanumerically.
+fn generate_features(mcu_gpio_map: &HashMap<String, Vec<String>>) -> Result<(), String> {
+    let mut main_features = mcu_gpio_map
+        .keys()
+        .map(|gpio| gpio_version_to_feature(gpio))
+        .collect::<Result<Vec<String>, String>>()?;
+    main_features.sort();
+
+    let mut mcu_aliases = vec![];
     for (gpio, mcu_list) in mcu_gpio_map {
-        let gpio_data = internal_peripheral::IpGPIO::load(db_dir, &gpio)
-            .map_err(|e| format!("Could not load IP GPIO file: {}", e))?;
-        println!("#[cfg(feature = \"{}\")]", gpio_version_to_feature(&gpio)?);
+        let gpio_version_feature = gpio_version_to_feature(gpio).unwrap();
         for mcu in mcu_list {
-            println!("// {}", mcu);
+            let mcu_feature = format!("mcu-{}", mcu);
+            mcu_aliases.push(format!("{} = [\"{}\"]", mcu_feature, gpio_version_feature));
         }
-        render_pin_modes(&gpio_data);
-        println!("\n");
+    }
+    mcu_aliases.sort();
+
+    println!("// Features based on the GPIO peripheral version.");
+    println!("// This determines the pin function mapping of the MCU.");
+    for feature in main_features {
+        println!("{} = []", feature);
+    }
+    println!("\n// Per-MCU aliases for the GPIO peripheral version.");
+    for alias in mcu_aliases {
+        println!("{}", alias);
     }
 
     Ok(())
+}
+
+/// Generate the pin mappings for the target MCU family.
+fn generate_pin_mappings(
+    mcu_gpio_map: &HashMap<String, Vec<String>>,
+    db_dir: &Path,
+) -> Result<(), String> {
+    let mut gpio_versions = mcu_gpio_map.keys().collect::<Vec<_>>();
+    gpio_versions.sort();
+    for gpio in gpio_versions {
+        let gpio_version_feature = gpio_version_to_feature(&gpio)?;
+        println!("#[cfg(feature = \"{}\")]", gpio_version_feature);
+        let gpio_data = internal_peripheral::IpGPIO::load(db_dir, &gpio)
+            .map_err(|e| format!("Could not load IP GPIO file: {}", e))?;
+        render_pin_modes(&gpio_data);
+        println!("\n");
+    }
+    Ok(())
+}
+
+fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
+    let mut pin_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    for p in &ip.gpio_pin {
+        let name = p.get_name();
+        if let Some(n) = name {
+            pin_map.insert(n, p.get_af_modes());
+        }
+    }
+
+    let mut pin_map = pin_map
+        .into_iter()
+        .map(|(k, mut v)| {
+            #[allow(clippy::redundant_closure)]
+            v.sort_by(|a, b| compare_str(a, b));
+            (k, v)
+        })
+        .collect::<Vec<_>>();
+
+    pin_map.sort_by(|a, b| compare_str(&a.0, &b.0));
+
+    println!("pins! {{");
+    for (n, af) in pin_map {
+        if af.is_empty() {
+            continue;
+        } else if af.len() == 1 {
+            println!("    {} => {{{}}},", n, af[0]);
+        } else {
+            println!("    {} => {{", n);
+            for a in af {
+                println!("        {},", a);
+            }
+            println!("    }},");
+        }
+    }
+    println!("}}");
 }
 
 #[cfg(test)]
@@ -165,7 +212,7 @@ mod tests {
         assert!(gpio_version_to_feature("STM32F333_gpio_v1_1").is_err());
 
         // Error parsing, wrong pattern
-        assert!(gpio_version_to_feature("STM32F333_asdf_v1_0").is_err());
+        assert!(gpio_version_to_feature("STM32F333_qqio_v1_0").is_err());
 
         // Error parsing, too many underscores
         assert!(gpio_version_to_feature("STM32_STM32F333_gpio_v1_0").is_err());
