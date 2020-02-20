@@ -81,18 +81,16 @@ fn main() -> Result<(), String> {
                 .required(true),
         )
         .arg(
-            Arg::with_name("mcu_family")
-                .short("m")
-                .help("The MCU family to extract, e.g. \"STM32L0\"")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
             Arg::with_name("generate")
-                .short("g")
                 .help("What to generate")
                 .takes_value(true)
                 .possible_values(&["pin_mappings", "features"])
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("mcu_family")
+                .help("The MCU family to extract, e.g. \"STM32L0\"")
+                .takes_value(true)
                 .required(true),
         )
         .get_matches();
