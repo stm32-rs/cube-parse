@@ -6,15 +6,36 @@ A program to extract AF modes on MCU pins from the database files provided with 
 
 ## Usage
 
-```
-cargo run $PATH_TO_MCU_DB_DIR $NAME_OF_MCU_FAMILY
-```
+    cargo run features STM32L0 -d /path/to/stm32cubemx/db/mcu/
+    cargo run pin_mappings STM32L0 -d /path/to/stm32cubemx/db/mcu/
 
-Under a default windows install `$PATH_TO_MCU_DB_DIR` is `C:\Program Files
+Under a default Windows install, the database path is `C:\Program Files
 (x86)\STMicroelectronics\STM32Cube\STM32CubeMX\db\mcu`, adjust as appropriate
 for your local config. The MCU family name should match one of the MCU families
-as defined in `families.xml`. The program will output one AF mode definition
-per GPIO variant, with a corresponding feature gate.
+as defined in `families.xml`. At the time of writing, the following families
+are available:
+
+* STM32F0
+* STM32F1
+* STM32F2
+* STM32F3
+* STM32F4
+* STM32F7
+* STM32G0
+* STM32G4
+* STM32H7
+* STM32L0
+* STM32L1
+* STM32L4
+* STM32L4+
+* STM32L5
+* STM32MP1
+* STM32WB
+
+The program will output one AF mode definition per GPIO variant, with a
+corresponding feature gate.
+
+More on the generated feature groups can be found below.
 
 ## The STM32CubeMX Database
 
@@ -141,10 +162,10 @@ pin (AF0), or some other variants.
 
 ## Feature Groups
 
-When generating pin function mappings, we want to avoid generating a Cargo
-feature for every possible MCU, since that would result in dozens or even
-hundreds of features per family. If we don't generate a feature per MCU, we
-need to group them somehow. The best way is probably to follow ST's grouping,
+When generating pin function mappings, we want to avoid generating a mapping
+for every possible MCU, since that would result in dozens or even hundreds of
+pin definitions. However, if we don't want a mapping per MCU, we need to group
+them somehow. The best way for grouping is probably to follow ST's grouping,
 which is encoded in the IP versions described above.
 
 The feature names are mapped as follows:
@@ -186,6 +207,10 @@ However, sticking to the (sometimes non-logical) grouping used in the CubeMX
 database is probably still better than creating our own grouping, which may be
 broken at any time by ST releasing a new MCU in a pre-existing group, but with
 a different, incompatible GPIO IP version.
+
+In order to simplify the GPIO IP version selection for the user, alias features
+are generated. These are purely a convenience for the user and are never used
+directly as feature gates in the source code.
 
 <!-- Badges -->
 [github-actions]: https://github.com/dbrgn/cube-parse/actions?query=branch%3Amaster
