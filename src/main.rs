@@ -10,6 +10,11 @@ mod internal_peripheral;
 mod mcu;
 mod utils;
 
+enum GenerateTarget {
+    PinMappings,
+    Features,
+}
+
 fn render_pin_modes(ip: &internal_peripheral::IpGPIO) {
     let mut pin_map: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -67,7 +72,7 @@ fn main() -> Result<(), String> {
     let args = App::new("cube-parse")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Extract AF modes on MCU pins from the database files provided with STM32CubeMX")
-        .author(env!("CARGO_PKG_AUTHORS"))
+        .author(&*env!("CARGO_PKG_AUTHORS").replace(":", ", "))
         .arg(
             Arg::with_name("db_dir")
                 .short("d")
@@ -82,10 +87,24 @@ fn main() -> Result<(), String> {
                 .takes_value(true)
                 .required(true),
         )
+        .arg(
+            Arg::with_name("generate")
+                .short("g")
+                .help("What to generate")
+                .takes_value(true)
+                .possible_values(&["pin_mappings", "features"])
+                .required(true),
+        )
         .get_matches();
 
+    // Process args
     let db_dir = Path::new(args.value_of("db_dir").unwrap());
     let mcu_family = args.value_of("mcu_family").unwrap();
+    let generate = match args.value_of("generate").unwrap() {
+        "pin_mappings" => GenerateTarget::PinMappings,
+        "features" => GenerateTarget::Features,
+        _ => unreachable!(),
+    };
 
     let families = family::Families::load(&db_dir)
         .map_err(|e| format!("Could not load families XML: {}", e))?;
