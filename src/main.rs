@@ -95,18 +95,36 @@ fn main() -> Result<(), String> {
     }
 
     match generate {
-        GenerateTarget::Features => generate_features(&mcu_gpio_map)?,
+        GenerateTarget::Features => generate_features(&mcu_gpio_map, &mcu_family)?,
         GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
     };
 
     Ok(())
 }
 
+lazy_static! {
+    static ref FEATURE_DEPENDENCIES: HashMap<&'static str, HashMap<&'static str, &'static str>> = {
+        let mut m = HashMap::new();
+
+        // STM32L0
+        let mut l0 = HashMap::new();
+        l0.insert("^STM32L0.1", "stm32l0/stm32l0x1");
+        l0.insert("^STM32L0.2", "stm32l0/stm32l0x2");
+        l0.insert("^STM32L0.3", "stm32l0/stm32l0x3");
+        m.insert("STM32L0", l0);
+
+        m
+    };
+}
+
 /// Print the IO features, followed by MCU features that act purely as aliases
 /// for the IO features.
 ///
 /// Both lists are sorted alphanumerically.
-fn generate_features(mcu_gpio_map: &HashMap<String, Vec<String>>) -> Result<(), String> {
+fn generate_features(
+    mcu_gpio_map: &HashMap<String, Vec<String>>,
+    mcu_family: &str,
+) -> Result<(), String> {
     let mut main_features = mcu_gpio_map
         .keys()
         .map(|gpio| gpio_version_to_feature(gpio))
@@ -117,18 +135,46 @@ fn generate_features(mcu_gpio_map: &HashMap<String, Vec<String>>) -> Result<(), 
     for (gpio, mcu_list) in mcu_gpio_map {
         let gpio_version_feature = gpio_version_to_feature(gpio).unwrap();
         for mcu in mcu_list {
+            let mut dependencies = vec![];
+
+            // PAC feature
+            if let Some(family) = FEATURE_DEPENDENCIES.get(mcu_family) {
+                for (pattern, feature) in family {
+                    if Regex::new(pattern).unwrap().is_match(&mcu) {
+                        dependencies.push(feature.to_string());
+                        break;
+                    }
+                }
+            }
+
+            // GPIO version feature
+            dependencies.push(gpio_version_feature.clone());
+
             let mcu_feature = format!("mcu-{}", mcu);
-            mcu_aliases.push(format!("{} = [\"{}\"]", mcu_feature, gpio_version_feature));
+            mcu_aliases.push(format!(
+                "{} = [{}]",
+                mcu_feature,
+                &dependencies.iter().map(|val| format!("\"{}\"", val)).fold(
+                    String::new(),
+                    |mut acc, x| {
+                        if !acc.is_empty() {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&x);
+                        acc
+                    }
+                )
+            ));
         }
     }
     mcu_aliases.sort();
 
-    println!("// Features based on the GPIO peripheral version.");
-    println!("// This determines the pin function mapping of the MCU.");
+    println!("# Features based on the GPIO peripheral version.");
+    println!("# This determines the pin function mapping of the MCU.");
     for feature in main_features {
         println!("{} = []", feature);
     }
-    println!("\n// Per-MCU aliases for the GPIO peripheral version.");
+    println!("\n# Per-MCU aliases for the GPIO peripheral version.");
     for alias in mcu_aliases {
         println!("{}", alias);
     }
