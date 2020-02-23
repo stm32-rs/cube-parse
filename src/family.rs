@@ -61,7 +61,7 @@ pub struct SubFamily {
 #[serde(rename_all = "PascalCase")]
 pub struct Mcu {
     pub name: String,
-    package_name: String,
+    pub package_name: String,
     pub ref_name: String,
 }
 

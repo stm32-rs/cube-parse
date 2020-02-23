@@ -77,25 +77,38 @@ fn main() -> Result<(), String> {
         .find(|v| v.name == mcu_family)
         .ok_or_else(|| format!("Could not find family {}", mcu_family))?;
 
-    // Build MCU map
+    // MCU map
     //
     // The keys of this map are GPIO peripheral version strings (e.g.
     // "STM32L051_gpio_v1_0"), while the value is a Vec of MCU ref names.
     let mut mcu_gpio_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    // Package map
+    //
+    // The keys of this map are MCU ref names, the values are package names
+    // (e.g. ).
+    let mut mcu_package_map: HashMap<String, String> = HashMap::new();
+
     for sf in family {
         for mcu in sf {
             let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name)
                 .map_err(|e| format!("Could not load MCU data: {}", e))?;
+
             let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
             mcu_gpio_map
                 .entry(gpio_version)
                 .or_insert(vec![])
                 .push(mcu.ref_name.clone());
+
+            if mcu_family == "STM32L0" {
+                // The stm32l0xx-hal has package based features
+                mcu_package_map.insert(mcu.ref_name.clone(), mcu.package_name.clone());
+            }
         }
     }
 
     match generate {
-        GenerateTarget::Features => generate_features(&mcu_gpio_map, &mcu_family)?,
+        GenerateTarget::Features => generate_features(&mcu_gpio_map, &mcu_package_map, &mcu_family)?,
         GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
     };
 
@@ -108,9 +121,9 @@ lazy_static! {
 
         // STM32L0
         let mut l0 = HashMap::new();
-        l0.insert("^STM32L0.1", "stm32l0/stm32l0x1");
-        l0.insert("^STM32L0.2", "stm32l0/stm32l0x2");
-        l0.insert("^STM32L0.3", "stm32l0/stm32l0x3");
+        l0.insert("^STM32L0.1", "stm32l0x1");
+        l0.insert("^STM32L0.2", "stm32l0x2");
+        l0.insert("^STM32L0.3", "stm32l0x3");
         m.insert("STM32L0", l0);
 
         m
@@ -123,6 +136,7 @@ lazy_static! {
 /// Both lists are sorted alphanumerically.
 fn generate_features(
     mcu_gpio_map: &HashMap<String, Vec<String>>,
+    mcu_package_map: &HashMap<String, String>,
     mcu_family: &str,
 ) -> Result<(), String> {
     let mut main_features = mcu_gpio_map
@@ -137,7 +151,10 @@ fn generate_features(
         for mcu in mcu_list {
             let mut dependencies = vec![];
 
-            // PAC feature
+            // GPIO version feature
+            dependencies.push(gpio_version_feature.clone());
+
+            // Additional dependencies
             if let Some(family) = FEATURE_DEPENDENCIES.get(mcu_family) {
                 for (pattern, feature) in family {
                     if Regex::new(pattern).unwrap().is_match(&mcu) {
@@ -147,8 +164,10 @@ fn generate_features(
                 }
             }
 
-            // GPIO version feature
-            dependencies.push(gpio_version_feature.clone());
+            // Package based feature
+            if let Some(package) = mcu_package_map.get(mcu) {
+                dependencies.push(package.to_lowercase());
+            }
 
             let mcu_feature = format!("mcu-{}", mcu);
             mcu_aliases.push(format!(
@@ -169,12 +188,23 @@ fn generate_features(
     }
     mcu_aliases.sort();
 
-    println!("# Features based on the GPIO peripheral version.");
-    println!("# This determines the pin function mapping of the MCU.");
+    println!("# Features based on the GPIO peripheral version");
+    println!("# This determines the pin function mapping of the MCU");
     for feature in main_features {
         println!("{} = []", feature);
     }
-    println!("\n# Per-MCU aliases for the GPIO peripheral version.");
+    println!();
+    if !mcu_package_map.is_empty() {
+        println!("# Physical packages");
+        let mut packages = mcu_package_map.values().map(|v| v.to_lowercase()).collect::<Vec<_>>();
+        packages.sort_by(|a, b| compare_str(a, b));
+        packages.dedup();
+        for pkg in packages {
+            println!("{} = []", pkg);
+        }
+        println!();
+    }
+    println!("# MCUs");
     for alias in mcu_aliases {
         println!("{}", alias);
     }
