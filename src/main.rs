@@ -123,12 +123,12 @@ fn generate_features(mcu_gpio_map: &HashMap<String, Vec<String>>) -> Result<(), 
     }
     mcu_aliases.sort();
 
-    println!("// Features based on the GPIO peripheral version.");
-    println!("// This determines the pin function mapping of the MCU.");
+    println!("# Features based on the GPIO peripheral version.");
+    println!("# This determines the pin function mapping of the MCU.");
     for feature in main_features {
         println!("{} = []", feature);
     }
-    println!("\n// Per-MCU aliases for the GPIO peripheral version.");
+    println!("\n# Per-MCU aliases for the GPIO peripheral version.");
     for alias in mcu_aliases {
         println!("{}", alias);
     }
