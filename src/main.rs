@@ -108,7 +108,9 @@ fn main() -> Result<(), String> {
     }
 
     match generate {
-        GenerateTarget::Features => generate_features(&mcu_gpio_map, &mcu_package_map, &mcu_family)?,
+        GenerateTarget::Features => {
+            generate_features(&mcu_gpio_map, &mcu_package_map, &mcu_family)?
+        }
         GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
     };
 
@@ -196,7 +198,10 @@ fn generate_features(
     println!();
     if !mcu_package_map.is_empty() {
         println!("# Physical packages");
-        let mut packages = mcu_package_map.values().map(|v| v.to_lowercase()).collect::<Vec<_>>();
+        let mut packages = mcu_package_map
+            .values()
+            .map(|v| v.to_lowercase())
+            .collect::<Vec<_>>();
         packages.sort_by(|a, b| compare_str(a, b));
         packages.dedup();
         for pkg in packages {
