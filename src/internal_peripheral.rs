@@ -60,8 +60,8 @@ impl IpGPIO {
 }
 
 lazy_static! {
-    static ref USART_RX: Regex = Regex::new("USART._RX").unwrap();
-    static ref USART_TX: Regex = Regex::new("USART._TX").unwrap();
+    static ref USART_RX: Regex = Regex::new("(LP)?US?ART._RX").unwrap();
+    static ref USART_TX: Regex = Regex::new("(LP)?US?ART._TX").unwrap();
     static ref SPI_MOSI: Regex = Regex::new("SPI._MOSI").unwrap();
     static ref SPI_MISO: Regex = Regex::new("SPI._MISO").unwrap();
     static ref SPI_SCK: Regex = Regex::new("SPI._SCK").unwrap();
