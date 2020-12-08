@@ -12,8 +12,9 @@ mod utils;
 
 #[derive(Debug, PartialEq)]
 enum GenerateTarget {
-    PinMappings,
     Features,
+    PinMappings,
+    EepromSizes,
 }
 
 lazy_static! {
@@ -29,6 +30,11 @@ fn gpio_version_to_feature(version: &str) -> Result<String, String> {
     } else {
         Err(format!("Could not parse version {:?}", version))
     }
+}
+
+/// Get the EEPROM size (in KiB) feature for a certain size.
+fn eeprom_size_to_feature(size: u32) -> String {
+    format!("eeprom-{}", size)
 }
 
 fn main() -> Result<(), String> {
@@ -47,7 +53,7 @@ fn main() -> Result<(), String> {
             Arg::with_name("generate")
                 .help("What to generate")
                 .takes_value(true)
-                .possible_values(&["pin_mappings", "features"])
+                .possible_values(&["features", "pin_mappings", "eeprom_sizes"])
                 .required(true),
         )
         .arg(
@@ -62,8 +68,9 @@ fn main() -> Result<(), String> {
     let db_dir = Path::new(args.value_of("db_dir").unwrap());
     let mcu_family = args.value_of("mcu_family").unwrap();
     let generate = match args.value_of("generate").unwrap() {
-        "pin_mappings" => GenerateTarget::PinMappings,
         "features" => GenerateTarget::Features,
+        "pin_mappings" => GenerateTarget::PinMappings,
+        "eeprom_sizes" => GenerateTarget::EepromSizes,
         _ => unreachable!(),
     };
 
@@ -79,39 +86,68 @@ fn main() -> Result<(), String> {
 
     // MCU map
     //
+    // This maps a MCU ref name to the corresponding `mcu::Mcu` instance.
+    let mut mcu_map: HashMap<String, mcu::Mcu> = HashMap::new();
+
+    // GPIO map
+    //
     // The keys of this map are GPIO peripheral version strings (e.g.
     // "STM32L051_gpio_v1_0"), while the value is a Vec of MCU ref names.
     let mut mcu_gpio_map: HashMap<String, Vec<String>> = HashMap::new();
 
     // Package map
     //
-    // The keys of this map are MCU ref names, the values are package names
-    // (e.g. ).
+    // The keys of this map are MCU ref names, the values are package names.
     let mut mcu_package_map: HashMap<String, String> = HashMap::new();
 
+    // EEPROM size map
+    //
+    // The keys of this map are EEPROM sizes in KiB, the values are Vecs of MCU ref names.
+    let mut mcu_eeprom_size_map: HashMap<u32, Vec<String>> = HashMap::new();
+
+    // Iterate through subfamilies, then through MCUs. Fill the maps above with
+    // aggregated data.
     for sf in family {
         for mcu in sf {
+            // Load MCU data from the XML files
             let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name)
                 .map_err(|e| format!("Could not load MCU data: {}", e))?;
 
+            // Fill GPIO map
             let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
             mcu_gpio_map
                 .entry(gpio_version)
                 .or_insert(vec![])
                 .push(mcu.ref_name.clone());
 
+            // Fill package map
             if mcu_family == "STM32L0" {
                 // The stm32l0xx-hal has package based features
                 mcu_package_map.insert(mcu.ref_name.clone(), mcu.package_name.clone());
             }
+
+            // Fill EEPROM size map
+            if let Some(size) = mcu_dat.get_eeprom_size_kib() {
+                mcu_eeprom_size_map
+                    .entry(size)
+                    .or_insert(vec![])
+                    .push(mcu.ref_name.clone());
+            }
+
+            mcu_map.insert(mcu.ref_name.clone(), mcu_dat);
         }
     }
 
     match generate {
-        GenerateTarget::Features => {
-            generate_features(&mcu_gpio_map, &mcu_package_map, &mcu_family)?
-        }
+        GenerateTarget::Features => generate_features(
+            &mcu_map,
+            &mcu_gpio_map,
+            &mcu_package_map,
+            &mcu_eeprom_size_map,
+            &mcu_family,
+        )?,
         GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
+        GenerateTarget::EepromSizes => generate_eeprom_sizes(&mcu_eeprom_size_map)?,
     };
 
     Ok(())
@@ -132,31 +168,67 @@ lazy_static! {
     };
 }
 
-/// Print the IO features, followed by MCU features that act purely as aliases
-/// for the IO features.
+/// Generate all Cargo features
 ///
-/// Both lists are sorted alphanumerically.
+/// Feature categories:
+///
+/// - IO features (`io-*`)
+/// - EEPROM features (`eeprom-*`)
+///
+/// Finally, the MCU features are printed, they act purely as aliases for the
+/// other features.
 fn generate_features(
+    mcu_map: &HashMap<String, mcu::Mcu>,
     mcu_gpio_map: &HashMap<String, Vec<String>>,
     mcu_package_map: &HashMap<String, String>,
+    mcu_eeprom_size_map: &HashMap<u32, Vec<String>>,
     mcu_family: &str,
 ) -> Result<(), String> {
-    let mut main_features = mcu_gpio_map
+    // IO features
+    let mut io_features = mcu_gpio_map
         .keys()
         .map(|gpio| gpio_version_to_feature(gpio))
         .collect::<Result<Vec<String>, String>>()?;
-    main_features.sort();
+    io_features.sort();
+    println!("# Features based on the GPIO peripheral version");
+    println!("# This determines the pin function mapping of the MCU");
+    for feature in io_features {
+        println!("{} = []", feature);
+    }
+    println!();
 
+    // EEPROM sizes
+    let mut eeprom_sizes = mcu_eeprom_size_map.keys().collect::<Vec<_>>();
+    eeprom_sizes.sort();
+    println!("# Features based on EEPROM size (in KiB)");
+    for size in eeprom_sizes {
+        println!("{} = []", eeprom_size_to_feature(*size));
+    }
+    println!();
+
+    // Physical packages
+    if !mcu_package_map.is_empty() {
+        println!("# Physical packages");
+        let mut packages = mcu_package_map
+            .values()
+            .map(|v| v.to_lowercase())
+            .collect::<Vec<_>>();
+        packages.sort_by(|a, b| compare_str(a, b));
+        packages.dedup();
+        for pkg in packages {
+            println!("{} = []", pkg);
+        }
+        println!();
+    }
+
+    // MCU features
     let mut mcu_aliases = vec![];
     for (gpio, mcu_list) in mcu_gpio_map {
         let gpio_version_feature = gpio_version_to_feature(gpio).unwrap();
         for mcu in mcu_list {
             let mut dependencies = vec![];
 
-            // GPIO version feature
-            dependencies.push(gpio_version_feature.clone());
-
-            // Additional dependencies
+            // Static feature dependencies
             if let Some(family) = FEATURE_DEPENDENCIES.get(mcu_family) {
                 for (pattern, feature) in family {
                     if Regex::new(pattern).unwrap().is_match(&mcu) {
@@ -171,10 +243,17 @@ fn generate_features(
                 dependencies.push(package.to_lowercase());
             }
 
-            let mcu_feature = format!("mcu-{}", mcu);
+            // GPIO version feature
+            dependencies.push(gpio_version_feature.clone());
+
+            // EEPROM size
+            if let Some(size) = mcu_map.get(mcu).unwrap().get_eeprom_size_kib() {
+                dependencies.push(eeprom_size_to_feature(size));
+            }
+
             mcu_aliases.push(format!(
-                "{} = [{}]",
-                mcu_feature,
+                "mcu-{} = [{}]",
+                mcu,
                 &dependencies.iter().map(|val| format!("\"{}\"", val)).fold(
                     String::new(),
                     |mut acc, x| {
@@ -189,27 +268,12 @@ fn generate_features(
         }
     }
     mcu_aliases.sort();
-
-    println!("# Features based on the GPIO peripheral version");
-    println!("# This determines the pin function mapping of the MCU");
-    for feature in main_features {
-        println!("{} = []", feature);
-    }
-    println!();
-    if !mcu_package_map.is_empty() {
-        println!("# Physical packages");
-        let mut packages = mcu_package_map
-            .values()
-            .map(|v| v.to_lowercase())
-            .collect::<Vec<_>>();
-        packages.sort_by(|a, b| compare_str(a, b));
-        packages.dedup();
-        for pkg in packages {
-            println!("{} = []", pkg);
-        }
-        println!();
-    }
-    println!("# MCUs");
+    println!("# MCU aliases");
+    println!("#");
+    println!("# Note: These are just aliases, they should not be used to directly feature gate");
+    println!(
+        "# functionality in the HAL! However, user code should usually depend on a MCU alias."
+    );
     for alias in mcu_aliases {
         println!("{}", alias);
     }
@@ -231,6 +295,16 @@ fn generate_pin_mappings(
             .map_err(|e| format!("Could not load IP GPIO file: {}", e))?;
         render_pin_modes(&gpio_data);
         println!("\n");
+    }
+    Ok(())
+}
+
+/// Generate code containing the EEPROM size.
+fn generate_eeprom_sizes(mcu_eeprom_size_map: &HashMap<u32, Vec<String>>) -> Result<(), String> {
+    println!("// EEPROM sizes in KiB, generated with cube-parse");
+    for size in mcu_eeprom_size_map.keys() {
+        println!("#[cfg({})]", eeprom_size_to_feature(*size));
+        println!("const EEPROM_SIZE_KIB: u32 = {};", size);
     }
     Ok(())
 }

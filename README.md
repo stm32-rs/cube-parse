@@ -2,7 +2,9 @@
 
 [![Build Status][github-actions-badge]][github-actions]
 
-A program to extract AF modes on MCU pins from the database files provided with STM32CubeMX.
+A program to extract hardware configuration information from the MCU database
+files shipped with STM32CubeMX.
+
 
 ## Usage
 
@@ -32,10 +34,6 @@ are available:
 * STM32MP1
 * STM32WB
 
-The program will output one AF mode definition per GPIO variant, with a
-corresponding feature gate.
-
-More on the generated feature groups can be found below.
 
 ## The STM32CubeMX Database
 
@@ -160,7 +158,8 @@ As you can see, this element describes the pin `PB6`. Depending on the chosen
 Alternative Function (AF), it can become an `I2C1_SCL` pin (AF1), a `USART1_TX`
 pin (AF0), or some other variants.
 
-## Feature Groups
+
+## GPIO Feature Groups
 
 When generating pin function mappings, we want to avoid generating a mapping
 for every possible MCU, since that would result in dozens or even hundreds of
@@ -211,6 +210,7 @@ a different, incompatible GPIO IP version.
 In order to simplify the GPIO IP version selection for the user, alias features
 are generated. These are purely a convenience for the user and are never used
 directly as feature gates in the source code.
+
 
 <!-- Badges -->
 [github-actions]: https://github.com/dbrgn/cube-parse/actions?query=branch%3Amaster

@@ -9,6 +9,8 @@ use crate::utils::load_file;
 pub struct Mcu {
     #[serde(rename = "IP", default)]
     ip: Vec<IP>,
+    #[serde(rename = "E2prom")]
+    eeprom_size_kib: String,
 }
 
 impl Mcu {
@@ -18,6 +20,11 @@ impl Mcu {
 
     pub fn get_ip(&self, name: &str) -> Option<&IP> {
         self.ip.iter().find(|v| v.name == name)
+    }
+
+    /// Return the EEPROM size in KiB
+    pub fn get_eeprom_size_kib(&self) -> Option<u32> {
+        self.eeprom_size_kib.parse().ok()
     }
 }
 
