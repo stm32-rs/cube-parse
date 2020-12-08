@@ -303,7 +303,7 @@ fn generate_pin_mappings(
 fn generate_eeprom_sizes(mcu_eeprom_size_map: &HashMap<u32, Vec<String>>) -> Result<(), String> {
     println!("// EEPROM sizes in bytes, generated with cube-parse");
     for size in mcu_eeprom_size_map.keys() {
-        println!("#[cfg({})]", eeprom_size_to_feature(*size));
+        println!("#[cfg(feature = \"{}\")]", eeprom_size_to_feature(*size));
         println!("const EEPROM_SIZE_BYTES: u32 = {};", size);
     }
     Ok(())
