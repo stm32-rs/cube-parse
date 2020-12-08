@@ -10,7 +10,7 @@ pub struct Mcu {
     #[serde(rename = "IP", default)]
     ip: Vec<IP>,
     #[serde(rename = "E2prom")]
-    eeprom_size_kib: String,
+    eeprom_size_bytes: String,
 }
 
 impl Mcu {
@@ -22,9 +22,9 @@ impl Mcu {
         self.ip.iter().find(|v| v.name == name)
     }
 
-    /// Return the EEPROM size in KiB
-    pub fn get_eeprom_size_kib(&self) -> Option<u32> {
-        self.eeprom_size_kib.parse().ok()
+    /// Return the EEPROM size in bytes
+    pub fn get_eeprom_size(&self) -> Option<u32> {
+        self.eeprom_size_bytes.parse().ok()
     }
 }
 

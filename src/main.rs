@@ -32,7 +32,7 @@ fn gpio_version_to_feature(version: &str) -> Result<String, String> {
     }
 }
 
-/// Get the EEPROM size (in KiB) feature for a certain size.
+/// Get the EEPROM size feature for a certain size.
 fn eeprom_size_to_feature(size: u32) -> String {
     format!("eeprom-{}", size)
 }
@@ -102,7 +102,7 @@ fn main() -> Result<(), String> {
 
     // EEPROM size map
     //
-    // The keys of this map are EEPROM sizes in KiB, the values are Vecs of MCU ref names.
+    // The keys of this map are EEPROM sizes, the values are Vecs of MCU ref names.
     let mut mcu_eeprom_size_map: HashMap<u32, Vec<String>> = HashMap::new();
 
     // Iterate through subfamilies, then through MCUs. Fill the maps above with
@@ -127,7 +127,7 @@ fn main() -> Result<(), String> {
             }
 
             // Fill EEPROM size map
-            if let Some(size) = mcu_dat.get_eeprom_size_kib() {
+            if let Some(size) = mcu_dat.get_eeprom_size() {
                 mcu_eeprom_size_map
                     .entry(size)
                     .or_insert(vec![])
@@ -200,7 +200,7 @@ fn generate_features(
     // EEPROM sizes
     let mut eeprom_sizes = mcu_eeprom_size_map.keys().collect::<Vec<_>>();
     eeprom_sizes.sort();
-    println!("# Features based on EEPROM size (in KiB)");
+    println!("# Features based on EEPROM size (in bytes)");
     for size in eeprom_sizes {
         println!("{} = []", eeprom_size_to_feature(*size));
     }
@@ -247,7 +247,7 @@ fn generate_features(
             dependencies.push(gpio_version_feature.clone());
 
             // EEPROM size
-            if let Some(size) = mcu_map.get(mcu).unwrap().get_eeprom_size_kib() {
+            if let Some(size) = mcu_map.get(mcu).unwrap().get_eeprom_size() {
                 dependencies.push(eeprom_size_to_feature(size));
             }
 
@@ -301,10 +301,10 @@ fn generate_pin_mappings(
 
 /// Generate code containing the EEPROM size.
 fn generate_eeprom_sizes(mcu_eeprom_size_map: &HashMap<u32, Vec<String>>) -> Result<(), String> {
-    println!("// EEPROM sizes in KiB, generated with cube-parse");
+    println!("// EEPROM sizes in bytes, generated with cube-parse");
     for size in mcu_eeprom_size_map.keys() {
         println!("#[cfg({})]", eeprom_size_to_feature(*size));
-        println!("const EEPROM_SIZE_KIB: u32 = {};", size);
+        println!("const EEPROM_SIZE_BYTES: u32 = {};", size);
     }
     Ok(())
 }
