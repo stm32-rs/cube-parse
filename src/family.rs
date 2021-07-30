@@ -63,6 +63,20 @@ pub struct Mcu {
     pub name: String,
     pub package_name: String,
     pub ref_name: String,
+    #[serde(rename = "Flash")]
+    pub flash_size: String,
+    #[serde(rename = "Ram")]
+    pub ram_size: String,
+}
+
+impl Mcu {
+    pub fn flash_size(&self) -> Option<u32> {
+        self.flash_size.parse().ok()
+    }
+
+    pub fn ram_size(&self) -> Option<u32> {
+        self.ram_size.parse().ok()
+    }
 }
 
 impl Families {

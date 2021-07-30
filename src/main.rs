@@ -37,6 +37,16 @@ fn eeprom_size_to_feature(size: u32) -> String {
     format!("eeprom-{}", size)
 }
 
+/// Get the Flash size feature for a certain size.
+fn flash_size_to_feature(size: u32) -> String {
+    format!("flash-{}", size)
+}
+
+/// Get the RAM size feature for a certain size.
+fn ram_size_to_feature(size: u32) -> String {
+    format!("ram-{}", size)
+}
+
 fn main() -> Result<(), String> {
     let args = App::new("cube-parse")
         .version(env!("CARGO_PKG_VERSION"))
@@ -87,7 +97,7 @@ fn main() -> Result<(), String> {
     // MCU map
     //
     // This maps a MCU ref name to the corresponding `mcu::Mcu` instance.
-    let mut mcu_map: HashMap<String, mcu::Mcu> = HashMap::new();
+    let mut mcu_map: HashMap<String, (&family::Mcu, mcu::Mcu)> = HashMap::new();
 
     // GPIO map
     //
@@ -105,13 +115,23 @@ fn main() -> Result<(), String> {
     // The keys of this map are EEPROM sizes, the values are Vecs of MCU ref names.
     let mut mcu_eeprom_size_map: HashMap<u32, Vec<String>> = HashMap::new();
 
+    // Flash size map
+    //
+    // The keys of this map are flash sizes, the values are Vecs of MCU ref names.
+    let mut mcu_flash_size_map: HashMap<u32, Vec<String>> = HashMap::new();
+
+    // RAM size map
+    //
+    // The keys of this map are RAM sizes, the values are Vecs of MCU ref names.
+    let mut mcu_ram_size_map: HashMap<u32, Vec<String>> = HashMap::new();
+
     // Iterate through subfamilies, then through MCUs. Fill the maps above with
     // aggregated data.
     for sf in family {
         for mcu in sf {
             // Load MCU data from the XML files
             let mcu_dat = mcu::Mcu::load(&db_dir, &mcu.name)
-                .map_err(|e| format!("Could not load MCU data: {}", e))?;
+                .map_err(|e| format!("Could not load MCU data for mcu {}: {}", &mcu.name, e))?;
 
             // Fill GPIO map
             let gpio_version = mcu_dat.get_ip("GPIO").unwrap().get_version().to_string();
@@ -134,7 +154,23 @@ fn main() -> Result<(), String> {
                     .push(mcu.ref_name.clone());
             }
 
-            mcu_map.insert(mcu.ref_name.clone(), mcu_dat);
+            // Fill flash size map
+            if let Some(flash_size) = mcu.flash_size() {
+                mcu_flash_size_map
+                    .entry(flash_size)
+                    .or_insert(vec![])
+                    .push(mcu.ref_name.clone());
+            }
+
+            // Fill RAM size map
+            if let Some(ram_size) = mcu.ram_size() {
+                mcu_ram_size_map
+                    .entry(ram_size)
+                    .or_insert(vec![])
+                    .push(mcu.ref_name.clone());
+            }
+
+            mcu_map.insert(mcu.ref_name.clone(), (mcu, mcu_dat));
         }
     }
 
@@ -144,6 +180,8 @@ fn main() -> Result<(), String> {
             &mcu_gpio_map,
             &mcu_package_map,
             &mcu_eeprom_size_map,
+            &mcu_flash_size_map,
+            &mcu_ram_size_map,
             &mcu_family,
         )?,
         GenerateTarget::PinMappings => generate_pin_mappings(&mcu_gpio_map, &db_dir)?,
@@ -178,10 +216,12 @@ lazy_static! {
 /// Finally, the MCU features are printed, they act purely as aliases for the
 /// other features.
 fn generate_features(
-    mcu_map: &HashMap<String, mcu::Mcu>,
+    mcu_map: &HashMap<String, (&family::Mcu, mcu::Mcu)>,
     mcu_gpio_map: &HashMap<String, Vec<String>>,
     mcu_package_map: &HashMap<String, String>,
     mcu_eeprom_size_map: &HashMap<u32, Vec<String>>,
+    mcu_flash_size_map: &HashMap<u32, Vec<String>>,
+    mcu_ram_size_map: &HashMap<u32, Vec<String>>,
     mcu_family: &str,
 ) -> Result<(), String> {
     // IO features
@@ -203,6 +243,24 @@ fn generate_features(
     println!("# Features based on EEPROM size (in bytes)");
     for size in eeprom_sizes {
         println!("{} = []", eeprom_size_to_feature(*size));
+    }
+    println!();
+
+    // Flash sizes
+    let mut flash_sizes = mcu_flash_size_map.keys().collect::<Vec<_>>();
+    flash_sizes.sort();
+    println!("# Features based on Flash size (in kbytes)");
+    for size in flash_sizes {
+        println!("{} = []", flash_size_to_feature(*size));
+    }
+    println!();
+
+    // RAM sizes
+    let mut ram_sizes = mcu_ram_size_map.keys().collect::<Vec<_>>();
+    ram_sizes.sort();
+    println!("# Features based on RAM size (in kbytes)");
+    for size in ram_sizes {
+        println!("{} = []", ram_size_to_feature(*size));
     }
     println!();
 
@@ -246,9 +304,20 @@ fn generate_features(
             // GPIO version feature
             dependencies.push(gpio_version_feature.clone());
 
+            let (mcu_info, mcu_dat) = mcu_map.get(mcu).unwrap();
+
             // EEPROM size
-            if let Some(size) = mcu_map.get(mcu).unwrap().get_eeprom_size() {
+            if let Some(size) = mcu_dat.get_eeprom_size() {
                 dependencies.push(eeprom_size_to_feature(size));
+            }
+
+            // Flash & RAM size
+            if let Some(flash_size) = mcu_info.flash_size() {
+                dependencies.push(flash_size_to_feature(flash_size));
+            }
+
+            if let Some(ram_size) = mcu_info.ram_size() {
+                dependencies.push(ram_size_to_feature(ram_size));
             }
 
             mcu_aliases.push(format!(
