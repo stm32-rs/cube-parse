@@ -1,6 +1,6 @@
 [package]
 name = "cube-parse"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["HarkonenBade<github@harkonen.net>", "Danilo Bargen <mail@dbrgn.ch>"]
 edition = "2018"
 
